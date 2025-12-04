@@ -3,6 +3,25 @@
 set -e
 
 # ------------------------------------------------------------------------------
+# Sudo Credential Caching
+# ------------------------------------------------------------------------------
+# Prompt for password once upfront, then keep credentials refreshed
+echo "This installer requires administrator privileges for some steps."
+echo "You may be prompted for your password now."
+sudo -v
+
+# Keep sudo timestamp refreshed in background (runs every 60 seconds)
+while true; do
+    sudo -n true
+    sleep 60
+    kill -0 "$$" 2>/dev/null || exit
+done &
+SUDO_REFRESH_PID=$!
+
+# Clean up background process on exit
+trap 'kill $SUDO_REFRESH_PID 2>/dev/null' EXIT
+
+# ------------------------------------------------------------------------------
 # ASCII Banner
 # ------------------------------------------------------------------------------
 cat << 'EOF'
@@ -50,8 +69,7 @@ fi
 # ------------------------------------------------------------------------------
 if ! command -v brew &> /dev/null; then
     echo "Homebrew not found. Installing..."
-    echo "You may be prompted for your password to install Homebrew."
-    # Run Homebrew installer with explicit TTY to allow sudo prompts
+    # Run Homebrew installer with explicit TTY
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/tty
     
     # Add brew to PATH for this session (Apple Silicon vs Intel)
