@@ -22,53 +22,135 @@ EOF
 # Constants
 # ------------------------------------------------------------------------------
 LW_ZSH_DIR="$HOME/.lw-zsh"
-LW_ZSH_REPO="git@github.com-work:lunarway/lw-zsh-modern.git"
+LW_ZSH_REPO="git@github.com:lunarway/lw-zsh-modern.git"
 
 # ------------------------------------------------------------------------------
-# 1. Pre-flight Checks
+# 1. Install Xcode Command Line Tools (if needed)
 # ------------------------------------------------------------------------------
 echo "Checking dependencies..."
 
-if ! command -v brew &> /dev/null; then
-    echo "Error: Homebrew is not installed. Please install Homebrew first."
-    exit 1
+if ! xcode-select -p &> /dev/null; then
+    echo "Xcode Command Line Tools not found. Installing..."
+    xcode-select --install
+    
+    echo "Waiting for Xcode Command Line Tools installation to complete..."
+    echo "(Please follow the prompts in the popup window)"
+    
+    # Wait for installation to complete
+    until xcode-select -p &> /dev/null; do
+        sleep 5
+    done
+    echo "✓ Xcode Command Line Tools installed"
+else
+    echo "✓ Xcode Command Line Tools found"
 fi
 
+# ------------------------------------------------------------------------------
+# 2. Install Homebrew (if needed)
+# ------------------------------------------------------------------------------
+if ! command -v brew &> /dev/null; then
+    echo "Homebrew not found. Installing..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    
+    # Add brew to PATH for this session (Apple Silicon vs Intel)
+    if [[ -f "/opt/homebrew/bin/brew" ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -f "/usr/local/bin/brew" ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+    
+    if ! command -v brew &> /dev/null; then
+        echo "Error: Homebrew installation failed."
+        exit 1
+    fi
+    echo "✓ Homebrew installed"
+else
+    echo "✓ Homebrew found"
+fi
+
+# ------------------------------------------------------------------------------
+# 3. Install Essential Dependencies
+# ------------------------------------------------------------------------------
+echo "Installing essential tools..."
+
+# gum - required for installer UI
 if ! command -v gum &> /dev/null; then
-    echo "Installing gum via Homebrew..."
+    echo "Installing gum..."
     brew install gum
 fi
 
+# git - required for cloning
+if ! command -v git &> /dev/null; then
+    echo "Installing git..."
+    brew install git
+fi
+
+# gh - GitHub CLI for SSH key management
+if ! command -v gh &> /dev/null; then
+    echo "Installing GitHub CLI..."
+    brew install gh
+fi
+
+echo "✓ Essential tools ready"
+
 # ------------------------------------------------------------------------------
-# 2. GitHub Access Check
+# 4. GitHub Access Check
 # ------------------------------------------------------------------------------
 gum style --foreground 99 "Checking GitHub Access..."
 
-if ! ssh -T -o ConnectTimeout=5 git@github.com 2>&1 | grep -q "successfully authenticated"; then
-    gum style --foreground 196 "✗ Unable to authenticate with GitHub via SSH."
-    echo "Please ensure you have a valid SSH key added to your GitHub account."
-    echo "Run: ssh-add ~/.ssh/your-key"
-    exit 1
-fi
-gum style --foreground 82 "✓ GitHub SSH access confirmed"
+SSH_KEY_PATH="$HOME/.ssh/github"
+SSH_KEY_PUB="$SSH_KEY_PATH.pub"
 
-# Check for 'github.com-work' alias
-if ! ssh -G github.com-work >/dev/null 2>&1; then
-    gum style --foreground 196 "✗ 'github.com-work' SSH alias not found in ~/.ssh/config"
-    echo ""
-    echo "The installer needs this SSH alias to clone the private lw-zsh-modern repository."
-    echo "Add the following to ~/.ssh/config:"
-    echo ""
-    echo "Host github.com-work"
-    echo "  HostName github.com"
-    echo "  User git"
-    echo "  IdentityFile ~/.ssh/your-work-key"
-    echo ""
-    exit 1
+if ssh -T -o ConnectTimeout=5 git@github.com 2>&1 | grep -q "successfully authenticated"; then
+    gum style --foreground 82 "✓ GitHub SSH access confirmed"
+else
+    gum style --foreground 196 "✗ Unable to authenticate with GitHub via SSH."
+    
+    if gum confirm "Do you want to generate a new SSH key for GitHub?"; then
+        EMAIL=$(gum input --placeholder "Enter your Lunar email for the key (e.g. name@lunarway.com)")
+        if [[ -z "$EMAIL" ]]; then
+             echo "Email required for key generation."
+             exit 1
+        fi
+        
+        gum spin --spinner dot --title "Generating SSH Key..." -- \
+            ssh-keygen -t ed25519 -C "$EMAIL" -f "$SSH_KEY_PATH" -N ""
+        
+        gum style --foreground 82 "✓ SSH Key generated at $SSH_KEY_PATH"
+
+        # Add to ssh-agent
+        eval "$(ssh-agent -s)"
+        ssh-add "$SSH_KEY_PATH"
+        
+        # Configure ~/.ssh/config
+        if ! grep -q "Host github.com" "$HOME/.ssh/config" 2>/dev/null; then
+             mkdir -p "$HOME/.ssh"
+             echo "\nHost github.com\n  ForwardAgent yes\n  UseKeychain yes\n  IdentityFile $SSH_KEY_PATH\n" >> "$HOME/.ssh/config"
+             gum style --foreground 82 "✓ Added github.com to ~/.ssh/config"
+        fi
+
+        # Upload to GitHub via gh
+        gum style --foreground 99 "We can upload this key to GitHub automatically using the GitHub CLI (gh)."
+        if gum confirm "Upload key to GitHub?"; then
+             if ! gh auth status &>/dev/null; then
+                  gum style --foreground 208 "You need to login to GitHub first."
+                  gh auth login
+             fi
+             
+             gum spin --spinner dot --title "Uploading key..." -- \
+                  gh ssh-key add "$SSH_KEY_PUB" --title "Lunar-Workstation-$(date +%Y-%m-%d)" --type authentication
+             gum style --foreground 82 "✓ Key uploaded to GitHub"
+        else
+             gum style --foreground 245 "Please upload '$SSH_KEY_PUB' to GitHub manually."
+        fi
+    else
+        echo "Please ensure you have a valid SSH key added to your GitHub account."
+        exit 1
+    fi
 fi
 
 # ------------------------------------------------------------------------------
-# 3. Clone/Update Private Repository
+# 5. Clone/Update Private Repository
 # ------------------------------------------------------------------------------
 gum style --foreground 99 "Setting up lw-zsh-modern..."
 
@@ -84,7 +166,7 @@ fi
 gum style --foreground 82 "✓ lw-zsh-modern ready at $LW_ZSH_DIR"
 
 # ------------------------------------------------------------------------------
-# 4. Hand off to Main Installer
+# 6. Hand off to Main Installer
 # ------------------------------------------------------------------------------
 MAIN_INSTALLER="$LW_ZSH_DIR/install-lw-zsh.zsh"
 
