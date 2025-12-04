@@ -131,13 +131,13 @@ gum style --foreground 99 "Checking GitHub Access..."
 SSH_KEY_PATH="$HOME/.ssh/github"
 SSH_KEY_PUB="$SSH_KEY_PATH.pub"
 
-if ssh -T -o ConnectTimeout=5 git@github.com 2>&1 | grep -q "successfully authenticated"; then
+if ssh -T -o ConnectTimeout=5 -o BatchMode=yes git@github.com 2>&1 </dev/null | grep -q "successfully authenticated"; then
     gum style --foreground 82 "✓ GitHub SSH access confirmed"
 else
     gum style --foreground 196 "✗ Unable to authenticate with GitHub via SSH."
     
-    if gum confirm "Do you want to generate a new SSH key for GitHub?"; then
-        EMAIL=$(gum input --placeholder "Enter your Lunar email for the key (e.g. name@lunarway.com)")
+    if gum confirm "Do you want to generate a new SSH key for GitHub?" </dev/tty; then
+        EMAIL=$(gum input --placeholder "Enter your Lunar email for the key (e.g. name@lunarway.com)" </dev/tty)
         if [[ -z "$EMAIL" ]]; then
              echo "Email required for key generation."
              exit 1
@@ -161,10 +161,10 @@ else
 
         # Upload to GitHub via gh
         gum style --foreground 99 "We can upload this key to GitHub automatically using the GitHub CLI (gh)."
-        if gum confirm "Upload key to GitHub?"; then
+        if gum confirm "Upload key to GitHub?" </dev/tty; then
              if ! gh auth status &>/dev/null; then
                   gum style --foreground 208 "You need to login to GitHub first."
-                  gh auth login
+                  gh auth login </dev/tty
              fi
              
              gum spin --spinner dot --title "Uploading key..." -- \
