@@ -32,7 +32,7 @@ if ! grep -q "pam_tid.so" "$PAM_SUDO_FILE" 2>/dev/null; then
     echo "Would you like to enable TouchID for sudo authentication?"
     echo "This allows you to use your fingerprint instead of typing your password."
     echo ""
-    read "ENABLE_TOUCHID?Enable TouchID for sudo? [y/N]: "
+    read "ENABLE_TOUCHID?Enable TouchID for sudo? [y/N]: " </dev/tty
     
     if [[ "$ENABLE_TOUCHID" =~ ^[Yy]$ ]]; then
         echo "Enabling TouchID for sudo (requires your password once)..."
