@@ -51,7 +51,7 @@ fi
 # Constants
 # ------------------------------------------------------------------------------
 LW_ZSH_DIR="$HOME/.lw-zsh"
-LW_ZSH_REPO="git@github.com:lunarway/lw-zsh-modern.git"
+LW_ZSH_REPO="git@github.com:OSprange/lw-zsh-modern.git"
 
 # ------------------------------------------------------------------------------
 # 1. Install Xcode Command Line Tools (if needed)
