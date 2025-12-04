@@ -187,10 +187,10 @@ gum style --foreground 99 "Setting up lw-zsh-modern..."
 if [[ -d "$LW_ZSH_DIR" ]]; then
     gum style --foreground 245 "Updating existing installation..."
     gum spin --spinner dot --title "Pulling latest changes..." -- \
-        git -C "$LW_ZSH_DIR" pull --ff-only
+        git -C "$LW_ZSH_DIR" pull --ff-only </dev/null
 else
     gum spin --spinner dot --title "Cloning lw-zsh-modern..." -- \
-        git clone "$LW_ZSH_REPO" "$LW_ZSH_DIR"
+        git clone "$LW_ZSH_REPO" "$LW_ZSH_DIR" </dev/null
 fi
 
 gum style --foreground 82 "✓ lw-zsh-modern ready at $LW_ZSH_DIR"
