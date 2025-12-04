@@ -124,17 +124,91 @@ fi
 echo "✓ Essential tools ready"
 
 # ------------------------------------------------------------------------------
-# 4. GitHub Access Check
+# 4. SSH Key Setup (1Password or Traditional)
 # ------------------------------------------------------------------------------
-gum style --foreground 99 "Checking GitHub Access..."
+gum style --foreground 99 "SSH Key Configuration"
 
 SSH_KEY_PATH="$HOME/.ssh/github"
 SSH_KEY_PUB="$SSH_KEY_PATH.pub"
+OP_SSH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+USING_1PASSWORD=false
+
+# Check if user uses 1Password for SSH keys
+if gum confirm "Do you use 1Password for SSH keys?" </dev/tty; then
+    USING_1PASSWORD=true
+    
+    # Check if SSH Agent is enabled in 1Password
+    if gum confirm "Have you enabled the 'SSH Agent' in 1Password → Settings → Developer?" </dev/tty; then
+        gum style --foreground 82 "Great! We'll handle the rest."
+    else
+        gum style --foreground 208 "Please enable the SSH Agent in 1Password:"
+        gum style --foreground 245 "  1Password → Settings → Developer → Enable 'SSH Agent'"
+        echo ""
+        gum style --foreground 245 "Press Enter when you've enabled it..."
+        read </dev/tty
+    fi
+    
+    gum style --foreground 245 "Setting up 1Password SSH agent..."
+    
+    # Ensure ~/.ssh/config has the IdentityAgent for 1Password
+    mkdir -p "$HOME/.ssh"
+    if ! grep -q "2BUA8C4S2C.com.1password" "$HOME/.ssh/config" 2>/dev/null; then
+        # Add 1Password IdentityAgent to ssh config
+        if [[ -f "$HOME/.ssh/config" ]]; then
+            # Prepend to existing config with Host * block
+            {
+                echo 'Host *'
+                echo '  IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"'
+                echo ''
+                cat "$HOME/.ssh/config"
+            } > "$HOME/.ssh/config.tmp" && mv "$HOME/.ssh/config.tmp" "$HOME/.ssh/config"
+        else
+            # Create new config
+            cat > "$HOME/.ssh/config" << 'EOF'
+Host *
+  IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+EOF
+        fi
+        gum style --foreground 82 "✓ Added 1Password IdentityAgent to ~/.ssh/config"
+    else
+        gum style --foreground 82 "✓ 1Password IdentityAgent already configured in ~/.ssh/config"
+    fi
+    
+    # Export SSH_AUTH_SOCK for this session
+    export SSH_AUTH_SOCK="$OP_SSH_SOCK"
+    
+    # Check if socket exists (1Password must be running with SSH agent enabled)
+    if [[ ! -S "$OP_SSH_SOCK" ]]; then
+        gum style --foreground 208 "⚠ 1Password SSH agent socket not found."
+        gum style --foreground 245 "Please ensure 1Password is running and SSH Agent is enabled in:"
+        gum style --foreground 245 "  1Password > Settings > Developer > SSH Agent"
+        echo ""
+        gum style --foreground 245 "Press Enter to continue after enabling it, or Ctrl+C to exit..."
+        read </dev/tty
+    fi
+    
+    gum style --foreground 82 "✓ 1Password SSH agent configured"
+fi
+
+# ------------------------------------------------------------------------------
+# 5. GitHub Access Check
+# ------------------------------------------------------------------------------
+gum style --foreground 99 "Checking GitHub Access..."
 
 if ssh -T -o ConnectTimeout=5 -o BatchMode=yes git@github.com 2>&1 </dev/null | grep -q "successfully authenticated"; then
     gum style --foreground 82 "✓ GitHub SSH access confirmed"
 else
     gum style --foreground 196 "✗ Unable to authenticate with GitHub via SSH."
+    
+    if [[ "$USING_1PASSWORD" == true ]]; then
+        gum style --foreground 208 "You selected 1Password but SSH authentication failed."
+        gum style --foreground 245 "Please ensure:"
+        gum style --foreground 245 "  1. 1Password is running with SSH Agent enabled"
+        gum style --foreground 245 "  2. You have an SSH key stored in 1Password"
+        gum style --foreground 245 "  3. The key is added to your GitHub account"
+        echo ""
+        exit 1
+    fi
     
     if gum confirm "Do you want to generate a new SSH key for GitHub?" </dev/tty; then
         EMAIL=$(gum input --placeholder "Enter your Lunar email for the key (e.g. name@lunarway.com)" </dev/tty)
@@ -152,7 +226,7 @@ else
         eval "$(ssh-agent -s)"
         ssh-add "$SSH_KEY_PATH"
         
-        # Configure ~/.ssh/config
+        # Configure ~/.ssh/config for this key
         if ! grep -q "Host github.com" "$HOME/.ssh/config" 2>/dev/null; then
              mkdir -p "$HOME/.ssh"
              echo "\nHost github.com\n  ForwardAgent yes\n  UseKeychain yes\n  IdentityFile $SSH_KEY_PATH\n" >> "$HOME/.ssh/config"
@@ -180,7 +254,7 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 5. Clone/Update Private Repository
+# 6. Clone/Update Private Repository
 # ------------------------------------------------------------------------------
 gum style --foreground 99 "Setting up lw-zsh-modern..."
 
@@ -196,7 +270,7 @@ fi
 gum style --foreground 82 "✓ lw-zsh-modern ready at $LW_ZSH_DIR"
 
 # ------------------------------------------------------------------------------
-# 6. Hand off to Main Installer
+# 7. Hand off to Main Installer
 # ------------------------------------------------------------------------------
 MAIN_INSTALLER="$LW_ZSH_DIR/install-lw-zsh.zsh"
 
@@ -208,4 +282,6 @@ fi
 gum style --foreground 99 "Launching main installer..."
 echo ""
 
+# Pass 1Password flag to main installer via environment variable
+export LW_USING_1PASSWORD="$USING_1PASSWORD"
 exec zsh "$MAIN_INSTALLER"
