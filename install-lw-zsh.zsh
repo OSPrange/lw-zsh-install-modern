@@ -50,7 +50,9 @@ fi
 # ------------------------------------------------------------------------------
 if ! command -v brew &> /dev/null; then
     echo "Homebrew not found. Installing..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    echo "You may be prompted for your password to install Homebrew."
+    # Run Homebrew installer with explicit TTY to allow sudo prompts
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/tty
     
     # Add brew to PATH for this session (Apple Silicon vs Intel)
     if [[ -f "/opt/homebrew/bin/brew" ]]; then
