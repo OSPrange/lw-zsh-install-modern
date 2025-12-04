@@ -3,25 +3,6 @@
 set -e
 
 # ------------------------------------------------------------------------------
-# Sudo Credential Caching
-# ------------------------------------------------------------------------------
-# Prompt for password once upfront, then keep credentials refreshed
-echo "This installer requires administrator privileges for some steps."
-echo "You may be prompted for your password now."
-sudo -v
-
-# Keep sudo timestamp refreshed in background (runs every 60 seconds)
-while true; do
-    sudo -n true
-    sleep 60
-    kill -0 "$$" 2>/dev/null || exit
-done &
-SUDO_REFRESH_PID=$!
-
-# Clean up background process on exit
-trap 'kill $SUDO_REFRESH_PID 2>/dev/null' EXIT
-
-# ------------------------------------------------------------------------------
 # ASCII Banner
 # ------------------------------------------------------------------------------
 cat << 'EOF'
@@ -36,6 +17,35 @@ cat << 'EOF'
         Modern Bootstrap Installer
 
 EOF
+
+# ------------------------------------------------------------------------------
+# Sudo Authentication Notice & TouchID Setup
+# ------------------------------------------------------------------------------
+echo "This installer requires administrator privileges for some steps."
+echo "You will need to enter your password multiple times during installation."
+echo ""
+
+PAM_SUDO_FILE="/etc/pam.d/sudo"
+PAM_TID_LINE="auth       sufficient     pam_tid.so"
+
+if ! grep -q "pam_tid.so" "$PAM_SUDO_FILE" 2>/dev/null; then
+    echo "Would you like to enable TouchID for sudo authentication?"
+    echo "This allows you to use your fingerprint instead of typing your password."
+    echo ""
+    read "ENABLE_TOUCHID?Enable TouchID for sudo? [y/N]: "
+    
+    if [[ "$ENABLE_TOUCHID" =~ ^[Yy]$ ]]; then
+        echo "Enabling TouchID for sudo (requires your password once)..."
+        sudo sed -i '' "2i\\
+$PAM_TID_LINE
+" "$PAM_SUDO_FILE"
+        echo "✓ TouchID enabled for sudo"
+        echo ""
+    fi
+else
+    echo "✓ TouchID for sudo already enabled"
+    echo ""
+fi
 
 # ------------------------------------------------------------------------------
 # Constants
